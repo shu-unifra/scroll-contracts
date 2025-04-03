@@ -14,7 +14,8 @@ import {L1ERC1155Gateway} from "../../src/L1/gateways/L1ERC1155Gateway.sol";
 import {L1ERC721Gateway} from "../../src/L1/gateways/L1ERC721Gateway.sol";
 import {L1ETHGateway} from "../../src/L1/gateways/L1ETHGateway.sol";
 import {L1GatewayRouter} from "../../src/L1/gateways/L1GatewayRouter.sol";
-import {L1MessageQueueWithGasPriceOracle} from "../../src/L1/rollup/L1MessageQueueWithGasPriceOracle.sol";
+import {L1MessageQueueV1WithGasPriceOracle} from "../../src/L1/rollup/L1MessageQueueV1WithGasPriceOracle.sol";
+import {L1MessageQueueV2} from "../../src/L1/rollup/L1MessageQueueV2.sol";
 import {L1ScrollMessenger} from "../../src/L1/L1ScrollMessenger.sol";
 import {L1StandardERC20Gateway} from "../../src/L1/gateways/L1StandardERC20Gateway.sol";
 import {L1WETHGateway} from "../../src/L1/gateways/L1WETHGateway.sol";
@@ -23,7 +24,8 @@ import {MultipleVersionRollupVerifierSetOwner} from "./contracts/MultipleVersion
 import {ScrollChain} from "../../src/L1/rollup/ScrollChain.sol";
 import {ZkEvmVerifierV2} from "../../src/libraries/verifier/ZkEvmVerifierV2.sol";
 import {GasTokenExample} from "../../src/alternative-gas-token/GasTokenExample.sol";
-import {L1ScrollMessengerNonETH} from "../../src/alternative-gas-token/L1ScrollMessengerNonETH.sol";
+
+//import {L1ScrollMessengerNonETH} from "../../src/alternative-gas-token/L1ScrollMessengerNonETH.sol"; //shu@unifra.io GROUP01
 import {L1GasTokenGateway} from "../../src/alternative-gas-token/L1GasTokenGateway.sol";
 import {L1WrappedTokenGateway} from "../../src/alternative-gas-token/L1WrappedTokenGateway.sol";
 
@@ -38,17 +40,19 @@ import {L2WETHGateway} from "../../src/L2/gateways/L2WETHGateway.sol";
 import {L1GasPriceOracle} from "../../src/L2/predeploys/L1GasPriceOracle.sol";
 import {L2MessageQueue} from "../../src/L2/predeploys/L2MessageQueue.sol";
 import {L2TxFeeVault} from "../../src/L2/predeploys/L2TxFeeVault.sol";
-import {L2TxFeeVaultWithGasToken} from "../../src/alternative-gas-token/L2TxFeeVaultWithGasToken.sol";
+//import {L2TxFeeVaultWithGasToken} from "../../src/alternative-gas-token/L2TxFeeVaultWithGasToken.sol"; //shu@unifra.io GROUP02
 import {Whitelist} from "../../src/L2/predeploys/Whitelist.sol";
 import {WrappedEther} from "../../src/L2/predeploys/WrappedEther.sol";
 import {ScrollStandardERC20} from "../../src/libraries/token/ScrollStandardERC20.sol";
 import {ScrollStandardERC20FactorySetOwner} from "./contracts/ScrollStandardERC20FactorySetOwner.sol";
 
 import {ScrollChainMockFinalize} from "../../src/mocks/ScrollChainMockFinalize.sol";
-
+import {SystemConfig} from "../../src/L1/system-contract/SystemConfig.sol";
+import {ZkEvmVerifierPostEuclid} from "../../src/libraries/verifier/ZkEvmVerifierPostEuclid.sol";
 import "./Constants.sol";
 import "./Configuration.sol";
 import "./DeterministicDeployment.sol";
+import {console} from "forge-std/Script.sol";
 
 /// @dev The minimum deployer account balance.
 uint256 constant MINIMUM_DEPLOYER_BALANCE = 0.1 ether;
@@ -90,8 +94,12 @@ contract DeployScroll is DeterministicDeployment {
     address internal L1_ETH_GATEWAY_PROXY_ADDR;
     address internal L1_GATEWAY_ROUTER_IMPLEMENTATION_ADDR;
     address internal L1_GATEWAY_ROUTER_PROXY_ADDR;
-    address internal L1_MESSAGE_QUEUE_IMPLEMENTATION_ADDR;
-    address internal L1_MESSAGE_QUEUE_PROXY_ADDR;
+    address internal L1_MESSAGE_QUEUE_V1_IMPLEMENTATION_ADDR;
+    address internal L1_MESSAGE_QUEUE_V1_PROXY_ADDR;
+
+    address internal L1_MESSAGE_QUEUE_V2_IMPLEMENTATION_ADDR;
+    address internal L1_MESSAGE_QUEUE_V2_PROXY_ADDR;
+
     address internal L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR;
     address internal L1_PROXY_ADMIN_ADDR;
     address internal L1_PROXY_IMPLEMENTATION_PLACEHOLDER_ADDR;
@@ -107,10 +115,13 @@ contract DeployScroll is DeterministicDeployment {
     address internal L1_WHITELIST_ADDR;
     address internal L1_PLONK_VERIFIER_ADDR;
     address internal L1_ZKEVM_VERIFIER_V2_ADDR;
+    address internal L1_ZKEVM_VERIFIER_EUCLIDl_ADDR;
     address internal L1_GAS_TOKEN_ADDR;
     address internal L1_GAS_TOKEN_GATEWAY_IMPLEMENTATION_ADDR;
     address internal L1_GAS_TOKEN_GATEWAY_PROXY_ADDR;
     address internal L1_WRAPPED_TOKEN_GATEWAY_ADDR;
+    address internal L1_SYSTEM_CONFIG_IMPLEMENTATION_ADDR;
+    address internal L1_SYSTEM_CONFIG_PROXY_ADDR;
 
     // L2 addresses
     address internal L1_GAS_PRICE_ORACLE_ADDR;
@@ -192,9 +203,7 @@ contract DeployScroll is DeterministicDeployment {
     function run(string memory layer, string memory scriptMode) public {
         broadcastLayer = parseLayer(layer);
         ScriptMode mode = parseScriptMode(scriptMode);
-
         DeterministicDeployment.initialize(mode);
-
         checkDeployerBalance();
         deployAllContracts();
         initializeL1Contracts();
@@ -323,8 +332,11 @@ contract DeployScroll is DeterministicDeployment {
 
     function deployAllContracts() private {
         deployL1Contracts1stPass();
+
         deployL2Contracts1stPass();
+
         deployL1Contracts2ndPass();
+
         deployL2Contracts2ndPass();
     }
 
@@ -333,17 +345,25 @@ contract DeployScroll is DeterministicDeployment {
         deployL1Weth();
         deployL1ProxyAdmin();
         deployL1PlaceHolder();
+        deployL1SystemConfigProxy();
+        deployL1SystemConfig();
         deployL1Whitelist();
         deployL1ScrollChainProxy();
+        deployL1EnforcedTxGatewayProxy();
         deployL1ScrollMessengerProxy();
-        deployL1EnforcedTxGateway();
+        deployL1ETHGatewayProxy();
+        deployL1MessageQueueProxy();
+
         deployL1PlonkVerifier();
         deployL1ZkEvmVerifier();
         deployL1MultipleVersionRollupVerifier();
+        deployL1EnforcedTxGatewayImpl();
+
         deployL1MessageQueue();
+
         deployL1ScrollChain();
         deployL1GatewayRouter();
-        deployL1ETHGatewayProxy();
+
         deployL1WETHGatewayProxy();
         deployL1StandardERC20GatewayProxy();
         deployL1CustomERC20GatewayProxy();
@@ -404,6 +424,7 @@ contract DeployScroll is DeterministicDeployment {
 
     // @notice initializeL1Contracts initializes contracts deployed on L1.
     function initializeL1Contracts() private broadcast(Layer.L1) only(Layer.L1) {
+        initializeSystemConfig();
         initializeScrollChain();
         initializeL1MessageQueue();
         initializeL1ScrollMessenger();
@@ -500,6 +521,31 @@ contract DeployScroll is DeterministicDeployment {
         );
     }
 
+    function deployL1EnforcedTxGatewayProxy() private {
+        bytes memory args = abi.encode(
+            notnull(L1_PROXY_IMPLEMENTATION_PLACEHOLDER_ADDR),
+            notnull(L1_PROXY_ADMIN_ADDR),
+            new bytes(0)
+        );
+
+        L1_ENFORCED_TX_GATEWAY_PROXY_ADDR = deploy(
+            "L1_ENFORCED_TX_GATEWAY_PROXY",
+            type(TransparentUpgradeableProxy).creationCode,
+            args
+        );
+    }
+
+    function deployL1EnforcedTxGatewayImpl() private {
+        bytes memory constructorArgs = abi.encode(notnull(L1_MESSAGE_QUEUE_V2_PROXY_ADDR), notnull(L1_FEE_VAULT_ADDR));
+        L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR = deploy(
+            "L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION",
+            type(EnforcedTxGateway).creationCode,
+            constructorArgs
+        );
+
+        //upgrade(L2_PROXY_ADMIN_ADDR, L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR);
+    }
+
     function deployL1EnforcedTxGateway() private {
         L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR = deploy(
             "L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION",
@@ -524,8 +570,29 @@ contract DeployScroll is DeterministicDeployment {
     }
 
     function deployL1ZkEvmVerifier() private {
-        bytes memory args = abi.encode(notnull(L1_PLONK_VERIFIER_ADDR), V4_VERIFIER_DIGEST);
-        L1_ZKEVM_VERIFIER_V2_ADDR = deploy("L1_ZKEVM_VERIFIER_V2", type(ZkEvmVerifierV2).creationCode, args);
+        // bytes memory args = abi.encode(notnull(L1_PLONK_VERIFIER_ADDR), V4_VERIFIER_DIGEST);
+        // L1_ZKEVM_VERIFIER_V2_ADDR = deploy("L1_ZKEVM_VERIFIER_V2", type(ZkEvmVerifierV2).creationCode, args);
+
+        //TODO shu@unifra.io WHERE is VERIFIER_DIGEST_1
+        bytes32 VERIFIER_DIGEST_1 = 0x0000000000000000111111111111111100000000000000001111111111111111;
+        bytes32 VERIFIER_DIGEST_2 = 0x0000000000000000111111111111111100000000000000001111111111111112;
+
+        // ZkEvmVerifierPostEuclid x = new ZkEvmVerifierPostEuclid(
+        //     L1_PLONK_VERIFIER_ADDR,
+        //     VERIFIER_DIGEST_1,
+        //     VERIFIER_DIGEST_2
+        // );
+
+        bytes memory constructorArgs = abi.encode(
+            notnull(L1_PLONK_VERIFIER_ADDR),
+            VERIFIER_DIGEST_1,
+            VERIFIER_DIGEST_2
+        );
+        L1_ZKEVM_VERIFIER_EUCLIDl_ADDR = deploy(
+            "L1_ZKEVM_VERIFIER_EUCLIDl",
+            type(ZkEvmVerifierPostEuclid).creationCode,
+            constructorArgs
+        );
     }
 
     function deployL1MultipleVersionRollupVerifier() private {
@@ -533,11 +600,10 @@ contract DeployScroll is DeterministicDeployment {
         address[] memory _verifiers = new address[](1);
 
         // register V4 verifier: DarwinV2 upgrade, plonk verifier v0.13.1
-        _versions[0] = 4;
-        _verifiers[0] = notnull(L1_ZKEVM_VERIFIER_V2_ADDR);
-
+        // version 6 comes from 'scripts/foundry/DeployL1BridgeContracts.s.sol:deployMultipleVersionRollupVerifier'
+        _versions[0] = 6;
+        _verifiers[0] = notnull(L1_ZKEVM_VERIFIER_EUCLIDl_ADDR);
         bytes memory args = abi.encode(DEPLOYER_ADDR, _versions, _verifiers);
-
         L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR = deploy(
             "L1_MULTIPLE_VERSION_ROLLUP_VERIFIER",
             type(MultipleVersionRollupVerifierSetOwner).creationCode,
@@ -545,37 +611,76 @@ contract DeployScroll is DeterministicDeployment {
         );
     }
 
-    function deployL1MessageQueue() private {
+    function deployL1MessageQueueProxy() private {
         bytes memory args = abi.encode(
+            notnull(L1_PROXY_IMPLEMENTATION_PLACEHOLDER_ADDR),
+            notnull(L1_PROXY_ADMIN_ADDR),
+            new bytes(0)
+        );
+
+        L1_MESSAGE_QUEUE_V1_PROXY_ADDR = deploy(
+            "L1_MESSAGE_QUEUE_V1_PROXY",
+            type(TransparentUpgradeableProxy).creationCode,
+            args
+        );
+
+        L1_MESSAGE_QUEUE_V2_PROXY_ADDR = deploy(
+            "L1_MESSAGE_QUEUE_V2_PROXY",
+            type(TransparentUpgradeableProxy).creationCode,
+            args
+        );
+    }
+
+    function deployL1MessageQueue() private {
+        bytes memory args_v1 = abi.encode(
             notnull(L1_SCROLL_MESSENGER_PROXY_ADDR),
             notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
             notnull(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)
         );
 
-        L1_MESSAGE_QUEUE_IMPLEMENTATION_ADDR = deploy(
-            "L1_MESSAGE_QUEUE_IMPLEMENTATION",
-            type(L1MessageQueueWithGasPriceOracle).creationCode,
-            args
+        L1_MESSAGE_QUEUE_V1_IMPLEMENTATION_ADDR = deploy(
+            "L1_MESSAGE_QUEUE_V1_IMPLEMENTATION",
+            type(L1MessageQueueV1WithGasPriceOracle).creationCode,
+            args_v1
         );
 
-        bytes memory args2 = abi.encode(
-            notnull(L1_MESSAGE_QUEUE_IMPLEMENTATION_ADDR),
-            notnull(L1_PROXY_ADMIN_ADDR),
-            new bytes(0)
+        upgrade(L1_PROXY_ADMIN_ADDR, L1_MESSAGE_QUEUE_V1_PROXY_ADDR, L1_MESSAGE_QUEUE_V1_IMPLEMENTATION_ADDR);
+
+        /////
+        bytes memory args_v2 = abi.encode(
+            notnull(L1_SCROLL_MESSENGER_PROXY_ADDR),
+            notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
+            notnull(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR),
+            notnull(L1_MESSAGE_QUEUE_V1_PROXY_ADDR),
+            notnull(L1_SYSTEM_CONFIG_PROXY_ADDR)
         );
 
-        L1_MESSAGE_QUEUE_PROXY_ADDR = deploy(
-            "L1_MESSAGE_QUEUE_PROXY",
-            type(TransparentUpgradeableProxy).creationCode,
-            args2
+        L1_MESSAGE_QUEUE_V2_IMPLEMENTATION_ADDR = deploy(
+            "L1_MESSAGE_QUEUE_V2_IMPLEMENTATION",
+            type(L1MessageQueueV2).creationCode,
+            args_v2
         );
+
+        upgrade(L1_PROXY_ADMIN_ADDR, L1_MESSAGE_QUEUE_V2_PROXY_ADDR, L1_MESSAGE_QUEUE_V2_IMPLEMENTATION_ADDR);
+
+        //upgrade(L2_PROXY_ADMIN_ADDR, L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR);
     }
 
     function deployL1ScrollChain() private {
+        //   ScrollChain  constructor(
+        //     uint64 _chainId,
+        //     address _messageQueueV1,
+        //     address _messageQueueV2,
+        //     address _verifier,
+        //     address _system
+        // )
+
         bytes memory args = abi.encode(
             CHAIN_ID_L2,
-            notnull(L1_MESSAGE_QUEUE_PROXY_ADDR),
-            notnull(L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR)
+            notnull(L1_MESSAGE_QUEUE_V1_PROXY_ADDR),
+            notnull(L1_MESSAGE_QUEUE_V2_PROXY_ADDR),
+            notnull(L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR),
+            notnull(L1_SYSTEM_CONFIG_PROXY_ADDR)
         );
 
         bytes memory creationCode = type(ScrollChain).creationCode;
@@ -740,6 +845,30 @@ contract DeployScroll is DeterministicDeployment {
         L1_GAS_PRICE_ORACLE_ADDR = deploy("L1_GAS_PRICE_ORACLE", type(L1GasPriceOracle).creationCode, args);
     }
 
+    function deployL1SystemConfigProxy() private {
+        bytes memory args = abi.encode(
+            notnull(L1_PROXY_IMPLEMENTATION_PLACEHOLDER_ADDR),
+            notnull(L1_PROXY_ADMIN_ADDR),
+            new bytes(0)
+        );
+
+        L1_SYSTEM_CONFIG_PROXY_ADDR = deploy(
+            "L1_SYSTEM_CONFIG_PROXY",
+            type(TransparentUpgradeableProxy).creationCode,
+            args
+        );
+    }
+
+    function deployL1SystemConfig() private {
+        L1_SYSTEM_CONFIG_IMPLEMENTATION_ADDR = deploy(
+            "L1_SYSTEM_CONFIG_IMPLEMENTATION",
+            type(SystemConfig).creationCode,
+            new bytes(0)
+        );
+
+        upgrade(L1_PROXY_ADMIN_ADDR, L1_SYSTEM_CONFIG_PROXY_ADDR, L1_SYSTEM_CONFIG_IMPLEMENTATION_ADDR);
+    }
+
     function deployL2Whitelist() private {
         bytes memory args = abi.encode(DEPLOYER_ADDR);
         L2_WHITELIST_ADDR = deploy("L2_WHITELIST", type(Whitelist).creationCode, args);
@@ -753,15 +882,17 @@ contract DeployScroll is DeterministicDeployment {
         if (!ALTERNATIVE_GAS_TOKEN_ENABLED) {
             bytes memory args = abi.encode(DEPLOYER_ADDR, L1_FEE_VAULT_ADDR, FEE_VAULT_MIN_WITHDRAW_AMOUNT);
             L2_TX_FEE_VAULT_ADDR = deploy("L2_TX_FEE_VAULT", type(L2TxFeeVault).creationCode, args);
-        } else {
-            bytes memory args = abi.encode(
-                L2_ETH_GATEWAY_PROXY_ADDR,
-                DEPLOYER_ADDR,
-                L1_FEE_VAULT_ADDR,
-                FEE_VAULT_MIN_WITHDRAW_AMOUNT
-            );
-            L2_TX_FEE_VAULT_ADDR = deploy("L2_TX_FEE_VAULT", type(L2TxFeeVaultWithGasToken).creationCode, args);
         }
+        // shu@unifra.io GROUP02
+        // else {
+        //     bytes memory args = abi.encode(
+        //         L2_ETH_GATEWAY_PROXY_ADDR,
+        //         DEPLOYER_ADDR,
+        //         L1_FEE_VAULT_ADDR,
+        //         FEE_VAULT_MIN_WITHDRAW_AMOUNT
+        //     );
+        //     L2_TX_FEE_VAULT_ADDR = deploy("L2_TX_FEE_VAULT", type(L2TxFeeVaultWithGasToken).creationCode, args);
+        // }
     }
 
     function deployL2ProxyAdmin() private {
@@ -890,24 +1021,33 @@ contract DeployScroll is DeterministicDeployment {
      ***************************/
 
     function deployL1ScrollMessenger() private {
+        //default ALTERNATIVE_GAS_TOKEN_ENABLED is false //shu@unifra.io GROUP01
         if (ALTERNATIVE_GAS_TOKEN_ENABLED) {
-            bytes memory args = abi.encode(
-                notnull(L1_GAS_TOKEN_GATEWAY_PROXY_ADDR),
-                notnull(L2_SCROLL_MESSENGER_PROXY_ADDR),
-                notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
-                notnull(L1_MESSAGE_QUEUE_PROXY_ADDR)
-            );
-
-            L1_SCROLL_MESSENGER_IMPLEMENTATION_ADDR = deploy(
-                "L1_SCROLL_MESSENGER_IMPLEMENTATION",
-                type(L1ScrollMessengerNonETH).creationCode,
-                args
-            );
+            // bytes memory args = abi.encode(
+            //     notnull(L1_GAS_TOKEN_GATEWAY_PROXY_ADDR),
+            //     notnull(L2_SCROLL_MESSENGER_PROXY_ADDR),
+            //     notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
+            //     notnull(L1_MESSAGE_QUEUE_V2_PROXY_ADDR)
+            // );
+            // L1_SCROLL_MESSENGER_IMPLEMENTATION_ADDR = deploy(
+            //     "L1_SCROLL_MESSENGER_IMPLEMENTATION",
+            //     type(L1ScrollMessengerNonETH).creationCode,
+            //     args
+            // );
         } else {
+            /*
+            L1ScrollMessenger
+                constructor(
+                    address _counterpart,
+                    address _rollup,
+                    address _messageQueueV1,
+                    address _messageQueueV2)
+            */
             bytes memory args = abi.encode(
                 notnull(L2_SCROLL_MESSENGER_PROXY_ADDR),
                 notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
-                notnull(L1_MESSAGE_QUEUE_PROXY_ADDR)
+                notnull(L1_MESSAGE_QUEUE_V1_PROXY_ADDR),
+                notnull(L1_MESSAGE_QUEUE_V2_PROXY_ADDR)
             );
 
             L1_SCROLL_MESSENGER_IMPLEMENTATION_ADDR = deploy(
@@ -1079,6 +1219,7 @@ contract DeployScroll is DeterministicDeployment {
             type(TransparentUpgradeableProxy).creationCode,
             args
         );
+        upgrade(L2_PROXY_ADMIN_ADDR, L2_GATEWAY_ROUTER_PROXY_ADDR, L2_GATEWAY_ROUTER_IMPLEMENTATION_ADDR);
     }
 
     function deployL2StandardERC20Gateway() private {
@@ -1189,7 +1330,7 @@ contract DeployScroll is DeterministicDeployment {
     function initializeScrollChain() private {
         if (getInitializeCount(L1_SCROLL_CHAIN_PROXY_ADDR) == 0) {
             ScrollChain(L1_SCROLL_CHAIN_PROXY_ADDR).initialize(
-                notnull(L1_MESSAGE_QUEUE_PROXY_ADDR),
+                notnull(L1_MESSAGE_QUEUE_V1_PROXY_ADDR),
                 notnull(L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR),
                 MAX_TX_IN_CHUNK
             );
@@ -1205,33 +1346,36 @@ contract DeployScroll is DeterministicDeployment {
     }
 
     function initializeL1MessageQueue() private {
-        if (getInitializeCount(L1_MESSAGE_QUEUE_PROXY_ADDR) == 0) {
-            L1MessageQueueWithGasPriceOracle(L1_MESSAGE_QUEUE_PROXY_ADDR).initialize(
+        if (getInitializeCount(L1_MESSAGE_QUEUE_V1_PROXY_ADDR) == 0) {
+            L1MessageQueueV1WithGasPriceOracle(L1_MESSAGE_QUEUE_V1_PROXY_ADDR).initialize(
                 notnull(L1_SCROLL_MESSENGER_PROXY_ADDR),
                 notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
                 notnull(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR),
                 // note: this should be the address of L2GasPriceOracle,
-                // but since we are using L1MessageQueueWithGasPriceOracle, so we set an all zero address here
+                // but since we are using L1MessageQueueV1WithGasPriceOracle, so we set an all zero address here
                 address(0),
                 MAX_L1_MESSAGE_GAS_LIMIT
             );
         }
 
-        // note: since we are using L1MessageQueueWithGasPriceOracle,
+        // note: since we are using L1MessageQueueV1WithGasPriceOracle,
         // and we don't have a L2GasPriceOracle deploy, so we skip the initializeV2.
         // instead, we updateWhitelistChecker
-        // if (getInitializeCount(L1_MESSAGE_QUEUE_PROXY_ADDR) < 2) {
-        //     L1MessageQueueWithGasPriceOracle(L1_MESSAGE_QUEUE_PROXY_ADDR).initializeV2();
+        // if (getInitializeCount(L1_MESSAGE_QUEUE_V1_PROXY_ADDR) < 2) {
+        //     L1MessageQueueV1WithGasPriceOracle(L1_MESSAGE_QUEUE_V1_PROXY_ADDR).initializeV2();
         // }
-        if (L1MessageQueueWithGasPriceOracle(L1_MESSAGE_QUEUE_PROXY_ADDR).whitelistChecker() != L1_WHITELIST_ADDR) {
-            L1MessageQueueWithGasPriceOracle(L1_MESSAGE_QUEUE_PROXY_ADDR).updateWhitelistChecker(
+        if (
+            L1MessageQueueV1WithGasPriceOracle(L1_MESSAGE_QUEUE_V1_PROXY_ADDR).whitelistChecker() != L1_WHITELIST_ADDR
+        ) {
+            L1MessageQueueV1WithGasPriceOracle(L1_MESSAGE_QUEUE_V1_PROXY_ADDR).updateWhitelistChecker(
                 notnull(L1_WHITELIST_ADDR)
             );
         }
 
-        if (getInitializeCount(L1_MESSAGE_QUEUE_PROXY_ADDR) < 3) {
-            L1MessageQueueWithGasPriceOracle(L1_MESSAGE_QUEUE_PROXY_ADDR).initializeV3();
+        if (getInitializeCount(L1_MESSAGE_QUEUE_V1_PROXY_ADDR) < 3) {
+            L1MessageQueueV1WithGasPriceOracle(L1_MESSAGE_QUEUE_V1_PROXY_ADDR).initializeV3();
         }
+        L1MessageQueueV2(L1_MESSAGE_QUEUE_V2_PROXY_ADDR).initialize();
     }
 
     function initializeL1ScrollMessenger() private {
@@ -1240,23 +1384,20 @@ contract DeployScroll is DeterministicDeployment {
                 notnull(L2_SCROLL_MESSENGER_PROXY_ADDR),
                 notnull(L1_FEE_VAULT_ADDR),
                 notnull(L1_SCROLL_CHAIN_PROXY_ADDR),
-                notnull(L1_MESSAGE_QUEUE_PROXY_ADDR)
+                notnull(L1_MESSAGE_QUEUE_V2_PROXY_ADDR)
             );
         }
     }
 
     function initializeEnforcedTxGateway() private {
-        if (getInitializeCount(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR) == 0) {
-            EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).initialize(
-                notnull(L1_MESSAGE_QUEUE_PROXY_ADDR),
-                notnull(L1_FEE_VAULT_ADDR)
-            );
-        }
-
-        // disable gateway
-        if (!EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).paused()) {
-            EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).setPause(true);
-        }
+        //TODO shu@unifra.io in DogeOs, we do not need it
+        // if (getInitializeCount(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR) == 0) {
+        //     EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).initialize();
+        // }
+        // // disable gateway
+        // if (!EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).paused()) {
+        //     EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).setPause(true);
+        // }
     }
 
     function initializeL1GatewayRouter() private {
@@ -1390,12 +1531,14 @@ contract DeployScroll is DeterministicDeployment {
     }
 
     function transferL1ContractOwnership() private {
-        transferOwnership(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, OWNER_ADDR);
+        //transferOwnership(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, OWNER_ADDR);
+        transferOwnership(L1_SYSTEM_CONFIG_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_CUSTOM_ERC20_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_ERC1155_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_ERC721_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_GATEWAY_ROUTER_PROXY_ADDR, OWNER_ADDR);
-        transferOwnership(L1_MESSAGE_QUEUE_PROXY_ADDR, OWNER_ADDR);
+        transferOwnership(L1_MESSAGE_QUEUE_V1_PROXY_ADDR, OWNER_ADDR);
+        transferOwnership(L1_MESSAGE_QUEUE_V2_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_SCROLL_MESSENGER_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_STANDARD_ERC20_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR, OWNER_ADDR);
@@ -1561,5 +1704,21 @@ contract DeployScroll is DeterministicDeployment {
         if (!ALTERNATIVE_GAS_TOKEN_ENABLED) {
             transferOwnership(L2_WETH_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         }
+    }
+
+    function initializeSystemConfig() private {
+        SystemConfig(L1_SYSTEM_CONFIG_PROXY_ADDR).initialize(
+            vm.addr(DEPLOYER_PRIVATE_KEY),
+            L2GETH_SIGNER_ADDRESS,
+            SystemConfig.MessageQueueParameters({
+                maxGasLimit: uint32(MAX_L1_MESSAGE_GAS_LIMIT),
+                baseFeeOverhead: 1000000000,
+                baseFeeScalar: 1000000000
+            }),
+            SystemConfig.EnforcedBatchParameters({
+                maxDelayEnterEnforcedMode: uint24(FINALIZE_BATCH_DEADLINE_SEC),
+                maxDelayMessageQueue: uint24(RELAY_MESSAGE_DEADLINE_SEC)
+            })
+        );
     }
 }

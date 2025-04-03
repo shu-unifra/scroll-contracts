@@ -89,6 +89,9 @@ abstract contract Configuration is Script {
     string internal ADMIN_SYSTEM_DASHBOARD_URI;
     string internal GRAFANA_URI;
 
+    uint256 internal FINALIZE_BATCH_DEADLINE_SEC;
+    uint256 internal RELAY_MESSAGE_DEADLINE_SEC;
+
     /**********************
      * Internal interface *
      **********************/
@@ -161,6 +164,9 @@ abstract contract Configuration is Script {
         EXTERNAL_EXPLORER_URI_L2 = cfg.readString(".frontend.EXTERNAL_EXPLORER_URI_L2");
         ADMIN_SYSTEM_DASHBOARD_URI = cfg.readString(".frontend.ADMIN_SYSTEM_DASHBOARD_URI");
         GRAFANA_URI = cfg.readString(".frontend.GRAFANA_URI");
+
+        FINALIZE_BATCH_DEADLINE_SEC = cfg.readUint(".rollup.FINALIZE_BATCH_DEADLINE_SEC");
+        RELAY_MESSAGE_DEADLINE_SEC = cfg.readUint(".rollup.RELAY_MESSAGE_DEADLINE_SEC");
 
         runSanityCheck();
     }

@@ -1,7 +1,13 @@
 #!/bin/sh
-
+echo "=== SCRIPT START ==="
 export FOUNDRY_EVM_VERSION="cancun"
 export FOUNDRY_BYTECODE_HASH="none"
+set -e
+
+echo "Environment variables:"
+echo "FOUNDRY_EVM_VERSION: $FOUNDRY_EVM_VERSION"
+echo "FOUNDRY_BYTECODE_HASH: $FOUNDRY_BYTECODE_HASH"
+echo "BATCH_SIZE: $BATCH_SIZE"
 
 if [ "${L1_RPC_ENDPOINT}" = "" ]; then
     echo "L1_RPC_ENDPOINT is not set"
@@ -41,8 +47,14 @@ echo "deploying on L2"
 forge script scripts/deterministic/DeployScroll.s.sol:DeployScroll --rpc-url "$L2_RPC_ENDPOINT"  --batch-size "$BATCH_SIZE" --sig "run(string,string)" "L2" "verify-config" --broadcast --legacy || exit 1
 
 # log broadcast files
-echo "" 
-echo "Broadcast files:"
+
+echo "=== START BROADCAST FILES ==="
+echo "Current directory: $(pwd)"
+echo "Broadcast files location: broadcast/DeployScroll.s.sol/*/*"
+echo "Found files:"
+ls -la broadcast/DeployScroll.s.sol/*/* || echo "No files found"
+echo "Broadcast files content:"
+
 for file in broadcast/DeployScroll.s.sol/*/*; do
   if [ -f "$file" ]; then
     echo "$file:"
@@ -50,3 +62,4 @@ for file in broadcast/DeployScroll.s.sol/*/*; do
     echo ""
   fi
 done
+echo "=== END BROADCAST FILES ==="

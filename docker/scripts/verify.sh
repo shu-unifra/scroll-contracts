@@ -1,5 +1,8 @@
 #!/bin/sh
 
+export FOUNDRY_EVM_VERSION="cancun"
+export FOUNDRY_BYTECODE_HASH="none"
+
 # extract values from config file
 config_file="./volume/config.toml"
 CHAIN_ID_L1=$(grep -E "^CHAIN_ID_L1 =" "$config_file" | sed 's/ *= */=/' | cut -d'=' -f2-)
@@ -47,8 +50,8 @@ get_source_code_name() {
       L1_ENFORCED_TX_GATEWAY_PROXY_ADDR) echo TransparentUpgradeableProxy ;;
       L1_ZKEVM_VERIFIER_V2_ADDR) echo ZkEvmVerifierV2 ;;
       L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR ) echo MultipleVersionRollupVerifierSetOwner ;;
-      L1_MESSAGE_QUEUE_IMPLEMENTATION_ADDR) echo L1MessageQueueWithGasPriceOracle ;;
-      L1_MESSAGE_QUEUE_PROXY_ADDR) echo TransparentUpgradeableProxy ;;
+      L1_MESSAGE_QUEUE_V1_IMPLEMENTATION_ADDR) echo L1MessageQueueV1WithGasPriceOracle ;;
+      L1_MESSAGE_QUEUE_V1_PROXY_ADDR) echo TransparentUpgradeableProxy ;;
       L1_SCROLL_CHAIN_IMPLEMENTATION_ADDR) echo ScrollChain ;;
       L1_GATEWAY_ROUTER_IMPLEMENTATION_ADDR) echo L1GatewayRouter ;;
       L1_GATEWAY_ROUTER_PROXY_ADDR) echo TransparentUpgradeableProxy ;;

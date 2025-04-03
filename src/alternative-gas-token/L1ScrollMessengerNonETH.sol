@@ -4,7 +4,7 @@ pragma solidity =0.8.24;
 
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 
-import {IL1MessageQueue} from "../L1/rollup/IL1MessageQueue.sol";
+import {IL1MessageQueueV1} from "../L1/rollup/IL1MessageQueueV1.sol";
 import {IScrollChain} from "../L1/rollup/IScrollChain.sol";
 import {L1ScrollMessenger} from "../L1/L1ScrollMessenger.sol";
 import {IMessageDropCallback} from "../libraries/callbacks/IMessageDropCallback.sol";
@@ -43,8 +43,12 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
     /// @dev Thrown when the provided merkle proof is invalid.
     error ErrorInvalidMerkleProof();
 
+    /*
+    //shu@unifra.io: this error had been decllared by L1ScrollMessenger
+
     /// @dev Thrown when call to message queue.
     error ErrorForbidToCallMessageQueue();
+    */
 
     /// @dev Thrown when the message sender is invalid.
     error ErrorInvalidMessageSender();
@@ -64,8 +68,9 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         address _nativeTokenGateway,
         address _counterpart,
         address _rollup,
-        address _messageQueue
-    ) L1ScrollMessenger(_counterpart, _rollup, _messageQueue) {
+        address _messageQueue,
+        address _messageQueueV2
+    ) L1ScrollMessenger(_counterpart, _rollup, _messageQueue, _messageQueueV2) {
         nativeTokenGateway = _nativeTokenGateway;
     }
 
@@ -87,7 +92,7 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         }
 
         // compute the actual cross domain message calldata.
-        uint256 _messageNonce = IL1MessageQueue(messageQueue).nextCrossDomainMessageIndex();
+        uint256 _messageNonce = IL1MessageQueueV1(messageQueueV1).nextCrossDomainMessageIndex();
         bytes memory _xDomainCalldata = _encodeXDomainCalldata(
             _msgSender(),
             _to,
@@ -97,7 +102,7 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         );
 
         // compute and deduct the messaging fee to fee vault.
-        uint256 _fee = IL1MessageQueue(messageQueue).estimateCrossDomainMessageFee(_gasLimit);
+        uint256 _fee = IL1MessageQueueV1(messageQueueV1).estimateCrossDomainMessageFee(_gasLimit);
         if (msg.value < _fee) {
             revert ErrorInsufficientMsgValue();
         }
@@ -106,7 +111,7 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         }
 
         // append message to L1MessageQueue
-        IL1MessageQueue(messageQueue).appendCrossDomainMessage(counterpart, _gasLimit, _xDomainCalldata);
+        IL1MessageQueueV1(messageQueueV1).appendCrossDomainMessage(counterpart, _gasLimit, _xDomainCalldata);
 
         // record the message hash for future use.
         bytes32 _xDomainCalldataHash = keccak256(_xDomainCalldata);
@@ -128,7 +133,6 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         }
     }
 
-    /// @inheritdoc L1ScrollMessenger
     function _relayMessageWithProof(
         address _from,
         address _to,
@@ -136,7 +140,7 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         uint256 _nonce,
         bytes memory _message,
         L2MessageProof memory _proof
-    ) internal virtual override {
+    ) internal virtual {
         // if we want to pass value to L1, must call to `L1NativeTokenGateway`.
         if (_l2GasTokenValue > 0 && _to != nativeTokenGateway) {
             revert ErrorNonZeroValueFromCrossDomainCaller();
@@ -162,7 +166,7 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         }
 
         // @note check more `_to` address to avoid attack in the future when we add more gateways.
-        if (_to == messageQueue) {
+        if (_to == messageQueueV1) {
             revert ErrorForbidToCallMessageQueue();
         }
         _validateTargetAddress(_to);
@@ -185,14 +189,13 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         }
     }
 
-    /// @inheritdoc L1ScrollMessenger
     function _dropMessage(
         address _from,
         address _to,
         uint256 _l2GasTokenValue,
         uint256 _messageNonce,
         bytes memory _message
-    ) internal virtual override {
+    ) internal virtual {
         // The criteria for dropping a message:
         // 1. The message is a L1 message.
         // 2. The message has not been dropped before.
@@ -224,7 +227,7 @@ contract L1ScrollMessengerNonETH is L1ScrollMessenger {
         // check message is skipped and drop it.
         // @note If the list is very long, the message may never be dropped.
         while (true) {
-            IL1MessageQueue(messageQueue).dropCrossDomainMessage(_lastIndex);
+            IL1MessageQueueV1(messageQueueV1).dropCrossDomainMessage(_lastIndex);
             _lastIndex = prevReplayIndex[_lastIndex];
             if (_lastIndex == 0) break;
             unchecked {

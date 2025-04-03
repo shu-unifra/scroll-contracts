@@ -1,4 +1,6 @@
 #!/bin/bash
+export FOUNDRY_EVM_VERSION="cancun"
+export FOUNDRY_BYTECODE_HASH="none"
 
 # the deployment of the L1GasTokenGateway implementation necessitates fetching the gas token decimal
 # in this case it requires the context of layer 1

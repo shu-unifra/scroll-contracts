@@ -43,8 +43,7 @@ contract L2TxFeeVaultWithGasToken is L2TxFeeVault {
      * Internal Functions *
      **********************/
 
-    /// @inheritdoc L2TxFeeVault
-    function sendWithdrawMessage(address _recipient, uint256 _value) internal override {
+    function sendWithdrawMessage(address _recipient, uint256 _value) internal {
         // no fee provided
         IL2ETHGateway(ETHGateway).withdrawETH{value: _value}(
             _recipient,
