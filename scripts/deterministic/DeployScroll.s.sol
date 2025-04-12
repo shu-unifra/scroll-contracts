@@ -114,7 +114,6 @@ contract DeployScroll is DeterministicDeployment {
     address internal L1_WETH_GATEWAY_PROXY_ADDR;
     address internal L1_WHITELIST_ADDR;
     address internal L1_PLONK_VERIFIER_ADDR;
-    address internal L1_ZKEVM_VERIFIER_V2_ADDR;
     address internal L1_ZKEVM_VERIFIER_V1_ADDR;
     address internal L1_GAS_TOKEN_ADDR;
     address internal L1_GAS_TOKEN_GATEWAY_IMPLEMENTATION_ADDR;
