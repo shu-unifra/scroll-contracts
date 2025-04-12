@@ -9,6 +9,7 @@
     "files": [
         "L1/gateways",
         "L1/rollup/IL1MessageQueueV1.sol",
+	"L1/rollup/IL1MessageQueueV2.sol",
         "L1/rollup/IL2GasPriceOracle.sol",
         "L1/rollup/IScrollChain.sol",
         "L1/IL1ScrollMessenger.sol",
