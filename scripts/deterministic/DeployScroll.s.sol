@@ -115,7 +115,7 @@ contract DeployScroll is DeterministicDeployment {
     address internal L1_WHITELIST_ADDR;
     address internal L1_PLONK_VERIFIER_ADDR;
     address internal L1_ZKEVM_VERIFIER_V2_ADDR;
-    address internal L1_ZKEVM_VERIFIER_EUCLIDl_ADDR;
+    address internal L1_ZKEVM_VERIFIER_V1_ADDR;
     address internal L1_GAS_TOKEN_ADDR;
     address internal L1_GAS_TOKEN_GATEWAY_IMPLEMENTATION_ADDR;
     address internal L1_GAS_TOKEN_GATEWAY_PROXY_ADDR;
@@ -543,26 +543,7 @@ contract DeployScroll is DeterministicDeployment {
             constructorArgs
         );
 
-        //upgrade(L2_PROXY_ADMIN_ADDR, L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR);
-    }
-
-    function deployL1EnforcedTxGateway() private {
-        L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR = deploy(
-            "L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION",
-            type(EnforcedTxGateway).creationCode
-        );
-
-        bytes memory args = abi.encode(
-            notnull(L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR),
-            notnull(L1_PROXY_ADMIN_ADDR),
-            new bytes(0)
-        );
-
-        L1_ENFORCED_TX_GATEWAY_PROXY_ADDR = deploy(
-            "L1_ENFORCED_TX_GATEWAY_PROXY",
-            type(TransparentUpgradeableProxy).creationCode,
-            args
-        );
+        upgrade(L1_PROXY_ADMIN_ADDR, L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR);
     }
 
     function deployL1PlonkVerifier() private {
@@ -570,29 +551,25 @@ contract DeployScroll is DeterministicDeployment {
     }
 
     function deployL1ZkEvmVerifier() private {
-        // bytes memory args = abi.encode(notnull(L1_PLONK_VERIFIER_ADDR), V4_VERIFIER_DIGEST);
-        // L1_ZKEVM_VERIFIER_V2_ADDR = deploy("L1_ZKEVM_VERIFIER_V2", type(ZkEvmVerifierV2).creationCode, args);
-
         //TODO shu@unifra.io WHERE is VERIFIER_DIGEST_1
         bytes32 VERIFIER_DIGEST_1 = 0x0000000000000000111111111111111100000000000000001111111111111111;
         bytes32 VERIFIER_DIGEST_2 = 0x0000000000000000111111111111111100000000000000001111111111111112;
-
-        // ZkEvmVerifierPostEuclid x = new ZkEvmVerifierPostEuclid(
-        //     L1_PLONK_VERIFIER_ADDR,
-        //     VERIFIER_DIGEST_1,
-        //     VERIFIER_DIGEST_2
-        // );
 
         bytes memory constructorArgs = abi.encode(
             notnull(L1_PLONK_VERIFIER_ADDR),
             VERIFIER_DIGEST_1,
             VERIFIER_DIGEST_2
         );
-        L1_ZKEVM_VERIFIER_EUCLIDl_ADDR = deploy(
-            "L1_ZKEVM_VERIFIER_EUCLIDl",
+        L1_ZKEVM_VERIFIER_V1_ADDR = deploy(
+            "L1_ZKEVM_VERIFIER_V1",
             type(ZkEvmVerifierPostEuclid).creationCode,
             constructorArgs
         );
+        /*
+                zkEvmVerifier = new ZkEvmVerifierPostEuclid(L1_PLONK_VERIFIER_ADDR, VERIFIER_DIGEST_1, VERIFIER_DIGEST_2);
+
+        logAddress("L1_ZKEVM_VERIFIER_V1_ADDR", address(zkEvmVerifier));
+        */
     }
 
     function deployL1MultipleVersionRollupVerifier() private {
@@ -602,7 +579,7 @@ contract DeployScroll is DeterministicDeployment {
         // register V4 verifier: DarwinV2 upgrade, plonk verifier v0.13.1
         // version 6 comes from 'scripts/foundry/DeployL1BridgeContracts.s.sol:deployMultipleVersionRollupVerifier'
         _versions[0] = 6;
-        _verifiers[0] = notnull(L1_ZKEVM_VERIFIER_EUCLIDl_ADDR);
+        _verifiers[0] = notnull(L1_ZKEVM_VERIFIER_V1_ADDR);
         bytes memory args = abi.encode(DEPLOYER_ADDR, _versions, _verifiers);
         L1_MULTIPLE_VERSION_ROLLUP_VERIFIER_ADDR = deploy(
             "L1_MULTIPLE_VERSION_ROLLUP_VERIFIER",
@@ -662,8 +639,6 @@ contract DeployScroll is DeterministicDeployment {
         );
 
         upgrade(L1_PROXY_ADMIN_ADDR, L1_MESSAGE_QUEUE_V2_PROXY_ADDR, L1_MESSAGE_QUEUE_V2_IMPLEMENTATION_ADDR);
-
-        //upgrade(L2_PROXY_ADMIN_ADDR, L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, L1_ENFORCED_TX_GATEWAY_IMPLEMENTATION_ADDR);
     }
 
     function deployL1ScrollChain() private {
@@ -1390,14 +1365,13 @@ contract DeployScroll is DeterministicDeployment {
     }
 
     function initializeEnforcedTxGateway() private {
-        //TODO shu@unifra.io in DogeOs, we do not need it
-        // if (getInitializeCount(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR) == 0) {
-        //     EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).initialize();
-        // }
-        // // disable gateway
-        // if (!EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).paused()) {
-        //     EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).setPause(true);
-        // }
+        if (getInitializeCount(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR) == 0) {
+            EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).initialize();
+        }
+        // disable gateway
+        if (!EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).paused()) {
+            EnforcedTxGateway(payable(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR)).setPause(true);
+        }
     }
 
     function initializeL1GatewayRouter() private {
@@ -1531,7 +1505,7 @@ contract DeployScroll is DeterministicDeployment {
     }
 
     function transferL1ContractOwnership() private {
-        //transferOwnership(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, OWNER_ADDR);
+        transferOwnership(L1_ENFORCED_TX_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_SYSTEM_CONFIG_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_CUSTOM_ERC20_GATEWAY_PROXY_ADDR, OWNER_ADDR);
         transferOwnership(L1_ERC1155_GATEWAY_PROXY_ADDR, OWNER_ADDR);
